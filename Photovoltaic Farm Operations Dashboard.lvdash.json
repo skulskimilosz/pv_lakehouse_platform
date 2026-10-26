@@ -1,0 +1,1684 @@
+{
+  "datasets": [
+    {
+      "name": "8538ab54",
+      "displayName": "Dzienna praca farmy i decyzje operatora",
+      "queryLines": [
+        "SELECT\r\n",
+        "    replay.*,\r\n",
+        "    GREATEST(net_export_mwh, 0.0) AS export_to_grid_mwh,\r\n",
+        "    COALESCE(pv_to_battery_mwh, 0.0)\r\n",
+        "        + COALESCE(grid_to_battery_mwh, 0.0) AS battery_charge_mwh,\r\n",
+        "    COALESCE(battery_to_grid_mwh, 0.0) AS battery_discharge_mwh,\r\n",
+        "    (\r\n",
+        "        COALESCE(pv_to_battery_mwh, 0.0)\r\n",
+        "        + COALESCE(grid_to_battery_mwh, 0.0)\r\n",
+        "    ) * (1.0 - SQRT(0.90))\r\n",
+        "    + COALESCE(battery_to_grid_mwh, 0.0)\r\n",
+        "        * (1.0 / SQRT(0.90) - 1.0) AS battery_loss_mwh,\r\n",
+        "    net_revenue_usd AS interval_net_revenue_usd,\r\n",
+        "    FIRST_VALUE(soc_before_mwh) OVER (\r\n",
+        "        ORDER BY target_interval_start_utc\r\n",
+        "        ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING\r\n",
+        "    ) AS start_of_day_storage_mwh,\r\n",
+        "    LAST_VALUE(soc_after_mwh) OVER (\r\n",
+        "        ORDER BY target_interval_start_utc\r\n",
+        "        ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING\r\n",
+        "    ) AS end_of_day_storage_mwh,\r\n",
+        "    CASE system_recommendation\r\n",
+        "        WHEN 'CHARGE' THEN '🟢 ŁADUJ'\r\n",
+        "        WHEN 'DISCHARGE' THEN '🟠 ROZŁADUJ'\r\n",
+        "        ELSE '⚪ UTRZYMAJ'\r\n",
+        "    END AS decision_display,\r\n",
+        "    CASE system_recommendation\r\n",
+        "        WHEN 'CHARGE' THEN 'ŁADOWANIE'\r\n",
+        "        WHEN 'DISCHARGE' THEN 'ROZŁADOWANIE'\r\n",
+        "        ELSE 'POSTÓJ'\r\n",
+        "    END AS recommendation_display,\r\n",
+        "    CASE\r\n",
+        "        WHEN pv_to_grid_mwh > 1e-9 AND pv_to_battery_mwh > 1e-9 THEN 'PV → SIEĆ + PV → MAGAZYN'\r\n",
+        "        WHEN pv_to_grid_mwh > 1e-9 AND battery_to_grid_mwh > 1e-9 THEN 'PV + MAGAZYN → SIEĆ'\r\n",
+        "        WHEN pv_to_grid_mwh > 1e-9 THEN 'PV → SIEĆ'\r\n",
+        "        WHEN pv_to_battery_mwh > 1e-9 THEN 'PV → MAGAZYN'\r\n",
+        "        WHEN battery_to_grid_mwh > 1e-9 THEN 'MAGAZYN → SIEĆ'\r\n",
+        "        ELSE 'BRAK PRZEPŁYWU'\r\n",
+        "    END AS realized_flow_display,\r\n",
+        "    CASE system_recommendation\r\n",
+        "        WHEN 'CHARGE' THEN CONCAT(\r\n",
+        "            'Sprzedaj pozostałą energię PV i ładuj magazyn mocą ',\r\n",
+        "            FORMAT_NUMBER(ABS(recommended_battery_power_mw), 3), ' MW')\r\n",
+        "        WHEN 'DISCHARGE' THEN CONCAT(\r\n",
+        "            'Sprzedaj energię PV i energię z magazynu; rozładowuj mocą ',\r\n",
+        "            FORMAT_NUMBER(ABS(recommended_battery_power_mw), 3), ' MW')\r\n",
+        "        ELSE 'Sprzedaj całą dostępną energię PV; pozostaw magazyn bez zmian'\r\n",
+        "    END AS operator_flow_instruction\r\n",
+        "FROM workspace.energy_gold.daily_decision_replay_15m AS replay\r\n",
+        "WHERE delivery_date_local = :delivery_date\r\n",
+        "ORDER BY target_interval_start_utc"
+      ],
+      "parameters": [
+        {
+          "displayName": "Dzień pracy farmy",
+          "keyword": "delivery_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "2024-10-01"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "eb659122",
+      "displayName": "Dzienne wyniki pracy farmy",
+      "queryLines": [
+        "SELECT\r\n",
+        "    delivery_date_local,\r\n",
+        "    net_revenue_usd,\r\n",
+        "    actual_pv_energy_mwh,\r\n",
+        "    export_mwh,\r\n",
+        "    battery_charge_mwh,\r\n",
+        "    battery_discharge_mwh,\r\n",
+        "    battery_charge_mwh * (1.0 - SQRT(0.90))\r\n",
+        "        + battery_discharge_mwh * (1.0 / SQRT(0.90) - 1.0)\r\n",
+        "        AS battery_loss_mwh,\r\n",
+        "    end_of_day_soc_mwh AS end_of_day_storage_mwh\r\n",
+        "FROM workspace.energy_gold.battery_backtest_daily\r\n",
+        "WHERE scenario = 'BATTERY_BALANCING_PV_ONLY'\r\n",
+        "ORDER BY delivery_date_local"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "110802e9",
+      "displayName": "Panel dzienny",
+      "layout": [
+        {
+          "widget": {
+            "name": "header_text",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Panel dzienny farmy fotowoltaicznej z magazynem energii\n",
+                "\n",
+                "Wybierz dzień. Panel pokazuje przychód, produkcję i przepływy energii oraz 96 decyzji operatora. Farma posiada magazyn; porównanie wariantów inwestycyjnych nie jest częścią tego ekranu."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 5,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "date_filter",
+            "queries": [
+              {
+                "name": "operator_delivery_date_parameter",
+                "query": {
+                  "datasetName": "8538ab54",
+                  "parameters": [
+                    {
+                      "name": "delivery_date",
+                      "keyword": "delivery_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "title": "Dzień pracy farmy",
+                "showTitle": true,
+                "description": "Wybierz dzień, aby zobaczyć 96 interwałów 15-minutowych.",
+                "showDescription": true
+              },
+              "widgetType": "filter-date-picker",
+              "encodings": {
+                "fields": [
+                  {
+                    "parameterName": "delivery_date",
+                    "queryName": "operator_delivery_date_parameter"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 3,
+            "width": 5,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_daily_revenue",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "8538ab54",
+                  "fields": [
+                    {
+                      "name": "sum(interval_net_revenue_usd)",
+                      "expression": "SUM(`interval_net_revenue_usd`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Przychód netto dnia",
+                "description": "Przychód DAM i korekta rynku czasu rzeczywistego pomniejszone o koszt degradacji.",
+                "showDescription": true
+              },
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(interval_net_revenue_usd)",
+                  "format": {
+                    "type": "number-currency",
+                    "currencyCode": "USD",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 2
+                    }
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 0,
+            "width": 7,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_daily_pv",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "8538ab54",
+                  "fields": [
+                    {
+                      "name": "sum(actual_pv_energy_mwh)",
+                      "expression": "SUM(`actual_pv_energy_mwh`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Produkcja energii z PV"
+              },
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(actual_pv_energy_mwh)",
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 3
+                    }
+                  },
+                  "formatTemplate": "{{ @formatted }} MWh"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 3,
+            "width": 4,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_daily_export",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "8538ab54",
+                  "fields": [
+                    {
+                      "name": "sum(export_to_grid_mwh)",
+                      "expression": "SUM(`export_to_grid_mwh`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Energia oddana do sieci"
+              },
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(export_to_grid_mwh)",
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 3
+                    }
+                  },
+                  "formatTemplate": "{{ @formatted }} MWh"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 9,
+            "y": 3,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_storage_start",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "8538ab54",
+                  "fields": [
+                    {
+                      "name": "max(start_of_day_storage_mwh)",
+                      "expression": "MAX(`start_of_day_storage_mwh`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Stan początkowy magazynu"
+              },
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "max(start_of_day_storage_mwh)",
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 3
+                    }
+                  },
+                  "formatTemplate": "{{ @formatted }} MWh"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 5,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_storage_charged",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "8538ab54",
+                  "fields": [
+                    {
+                      "name": "sum(battery_charge_mwh)",
+                      "expression": "SUM(`battery_charge_mwh`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Energia skierowana do magazynu",
+                "description": "Energia doprowadzona do ładowania przed uwzględnieniem strat sprawności.",
+                "showDescription": true
+              },
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(battery_charge_mwh)",
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 3
+                    }
+                  },
+                  "formatTemplate": "{{ @formatted }} MWh"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 6,
+            "width": 7,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_storage_loss",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "8538ab54",
+                  "fields": [
+                    {
+                      "name": "sum(battery_loss_mwh)",
+                      "expression": "SUM(`battery_loss_mwh`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Straty energii w magazynie",
+                "description": "Straty powstające podczas ładowania i rozładowania przy sprawności cyklu 90%.",
+                "showDescription": true
+              },
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(battery_loss_mwh)",
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 3
+                    }
+                  },
+                  "formatTemplate": "{{ @formatted }} MWh"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 9,
+            "width": 6,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_storage_discharged",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "8538ab54",
+                  "fields": [
+                    {
+                      "name": "sum(battery_discharge_mwh)",
+                      "expression": "SUM(`battery_discharge_mwh`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Energia oddana przez magazyn"
+              },
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(battery_discharge_mwh)",
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 3
+                    }
+                  },
+                  "formatTemplate": "{{ @formatted }} MWh"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 9,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_storage_end",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "8538ab54",
+                  "fields": [
+                    {
+                      "name": "max(end_of_day_storage_mwh)",
+                      "expression": "MAX(`end_of_day_storage_mwh`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Stan końcowy magazynu"
+              },
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "max(end_of_day_storage_mwh)",
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 3
+                    }
+                  },
+                  "formatTemplate": "{{ @formatted }} MWh"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 9,
+            "y": 9,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "pv_comparison",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "8538ab54",
+                  "fields": [
+                    {
+                      "name": "target_time_local",
+                      "expression": "`target_time_local`"
+                    },
+                    {
+                      "name": "predicted_pv_energy_mwh",
+                      "expression": "`predicted_pv_energy_mwh`"
+                    },
+                    {
+                      "name": "actual_pv_energy_mwh",
+                      "expression": "`actual_pv_energy_mwh`"
+                    },
+                    {
+                      "name": "dam_schedule_mwh",
+                      "expression": "`dam_schedule_mwh`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "frame": {
+                "title": "Produkcja energii PV i harmonogram DAM — interwały 15-minutowe",
+                "showTitle": true
+              },
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "target_time_local",
+                  "displayName": "Czas lokalny",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "fields": [
+                    {
+                      "fieldName": "predicted_pv_energy_mwh",
+                      "displayName": "Prognozowana energia PV (MWh)"
+                    },
+                    {
+                      "fieldName": "actual_pv_energy_mwh",
+                      "displayName": "Rzeczywista energia PV (MWh)"
+                    },
+                    {
+                      "fieldName": "dam_schedule_mwh",
+                      "displayName": "Harmonogram DAM (MWh)"
+                    }
+                  ]
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 12,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "battery_command_timeline",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "8538ab54",
+                  "fields": [
+                    {
+                      "name": "target_time_local",
+                      "expression": "`target_time_local`"
+                    },
+                    {
+                      "name": "recommended_battery_power_mw",
+                      "expression": "`recommended_battery_power_mw`"
+                    },
+                    {
+                      "name": "recommendation_display",
+                      "expression": "`recommendation_display`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "frame": {
+                "title": "Polecenie dla magazynu (+ ładowanie / − rozładowanie)",
+                "showTitle": true,
+                "description": "Dodatnia moc oznacza ładowanie, ujemna — rozładowanie, a zero — brak zmiany stanu magazynu.",
+                "showDescription": true
+              },
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "target_time_local",
+                  "displayName": "Czas lokalny",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "recommended_battery_power_mw",
+                  "displayName": "Rekomendowana moc magazynu (MW)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 3
+                    }
+                  }
+                },
+                "color": {
+                  "fieldName": "recommendation_display",
+                  "displayName": "Decyzja",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 12,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "energy_flow_timeline",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "8538ab54",
+                  "fields": [
+                    {
+                      "name": "target_time_local",
+                      "expression": "`target_time_local`"
+                    },
+                    {
+                      "name": "pv_to_grid_mwh",
+                      "expression": "`pv_to_grid_mwh`"
+                    },
+                    {
+                      "name": "pv_to_battery_mwh",
+                      "expression": "`pv_to_battery_mwh`"
+                    },
+                    {
+                      "name": "battery_to_grid_mwh",
+                      "expression": "`battery_to_grid_mwh`"
+                    },
+                    {
+                      "name": "export_to_grid_mwh",
+                      "expression": "`export_to_grid_mwh`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "frame": {
+                "title": "Przepływy energii w wybranym dniu",
+                "showTitle": true,
+                "description": "Pokazuje, dokąd trafiła energia z PV i kiedy magazyn wspierał eksport do sieci.",
+                "showDescription": true
+              },
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "target_time_local",
+                  "displayName": "Czas lokalny",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "fields": [
+                    {
+                      "fieldName": "pv_to_grid_mwh",
+                      "displayName": "PV → sieć (MWh)"
+                    },
+                    {
+                      "fieldName": "pv_to_battery_mwh",
+                      "displayName": "PV → magazyn (MWh)"
+                    },
+                    {
+                      "fieldName": "battery_to_grid_mwh",
+                      "displayName": "Magazyn → sieć (MWh)"
+                    },
+                    {
+                      "fieldName": "export_to_grid_mwh",
+                      "displayName": "Łączny eksport do sieci (MWh)"
+                    }
+                  ]
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 18,
+            "width": 11,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "storage_state_timeline",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "8538ab54",
+                  "fields": [
+                    {
+                      "name": "target_time_local",
+                      "expression": "`target_time_local`"
+                    },
+                    {
+                      "name": "soc_before_mwh",
+                      "expression": "`soc_before_mwh`"
+                    },
+                    {
+                      "name": "soc_after_mwh",
+                      "expression": "`soc_after_mwh`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "frame": {
+                "title": "Stan naładowania magazynu w ciągu dnia",
+                "showTitle": true,
+                "description": "W projekcie magazyn ma pojemność 1,0 MWh, a dopuszczalny zakres pracy wynosi 0,1–0,9 MWh.",
+                "showDescription": true
+              },
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "target_time_local",
+                  "displayName": "Czas lokalny",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "fields": [
+                    {
+                      "fieldName": "soc_before_mwh",
+                      "displayName": "Stan przed decyzją (MWh)"
+                    },
+                    {
+                      "fieldName": "soc_after_mwh",
+                      "displayName": "Stan po decyzji (MWh)"
+                    }
+                  ]
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 24,
+            "width": 12,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "operator_decision_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "8538ab54",
+                  "fields": [
+                    {
+                      "name": "target_time_local",
+                      "expression": "`target_time_local`"
+                    },
+                    {
+                      "name": "decision_display",
+                      "expression": "`decision_display`"
+                    },
+                    {
+                      "name": "operator_flow_instruction",
+                      "expression": "`operator_flow_instruction`"
+                    },
+                    {
+                      "name": "actual_pv_energy_mwh",
+                      "expression": "`actual_pv_energy_mwh`"
+                    },
+                    {
+                      "name": "export_to_grid_mwh",
+                      "expression": "`export_to_grid_mwh`"
+                    },
+                    {
+                      "name": "battery_charge_mwh",
+                      "expression": "`battery_charge_mwh`"
+                    },
+                    {
+                      "name": "battery_discharge_mwh",
+                      "expression": "`battery_discharge_mwh`"
+                    },
+                    {
+                      "name": "soc_after_mwh",
+                      "expression": "`soc_after_mwh`"
+                    },
+                    {
+                      "name": "interval_net_revenue_usd",
+                      "expression": "`interval_net_revenue_usd`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "showDescription": true,
+                "title": {
+                  "value": "Plan i realizacja pracy farmy — 96 interwałów",
+                  "fields": []
+                },
+                "description": {
+                  "value": "UTRZYMAJ oznacza brak ruchu magazynu, a nie zatrzymanie sprzedaży energii PV do sieci.",
+                  "fields": []
+                }
+              },
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "target_time_local",
+                    "displayName": "Czas lokalny"
+                  },
+                  {
+                    "fieldName": "decision_display",
+                    "displayName": "Decyzja magazynu"
+                  },
+                  {
+                    "fieldName": "operator_flow_instruction",
+                    "displayName": "Instrukcja dla operatora"
+                  },
+                  {
+                    "fieldName": "actual_pv_energy_mwh",
+                    "format": {
+                      "type": "number-plain",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 4
+                      }
+                    },
+                    "displayName": "Produkcja PV (MWh)"
+                  },
+                  {
+                    "fieldName": "export_to_grid_mwh",
+                    "format": {
+                      "type": "number-plain",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 4
+                      }
+                    },
+                    "displayName": "Eksport do sieci (MWh)"
+                  },
+                  {
+                    "fieldName": "battery_charge_mwh",
+                    "format": {
+                      "type": "number-plain",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 4
+                      }
+                    },
+                    "displayName": "Energia skierowana do magazynu (MWh)"
+                  },
+                  {
+                    "fieldName": "battery_discharge_mwh",
+                    "format": {
+                      "type": "number-plain",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 4
+                      }
+                    },
+                    "displayName": "Energia oddana z magazynu (MWh)"
+                  },
+                  {
+                    "fieldName": "soc_after_mwh",
+                    "format": {
+                      "type": "number-plain",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 3
+                      }
+                    },
+                    "displayName": "Stan magazynu po decyzji (MWh)"
+                  },
+                  {
+                    "fieldName": "interval_net_revenue_usd",
+                    "format": {
+                      "type": "number-currency",
+                      "currencyCode": "USD",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 2
+                      }
+                    },
+                    "displayName": "Przychód netto interwału"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 29,
+            "width": 12,
+            "height": 10
+          }
+        },
+        {
+          "widget": {
+            "name": "operator_method_note",
+            "multilineTextboxSpec": {
+              "lines": [
+                "### Jak czytać panel\n",
+                "\n",
+                "Rekomendacja jest decyzją dostępną przed interwałem. Rzeczywista produkcja, przepływy i przychód są późniejszą realizacją używaną do oceny działania systemu."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 39,
+            "width": 12,
+            "height": 3
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1"
+    },
+    {
+      "name": "6da38cf8",
+      "displayName": "Podsumowanie miesiąca",
+      "layout": [
+        {
+          "widget": {
+            "name": "period_header",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Podsumowanie pracy farmy — październik 2024\n",
+                "\n",
+                "Widok agreguje działanie wdrożonej polityki sterowania magazynem. Nie służy do wyboru wariantu bez magazynu ani do porównywania strategii. Przychód jest operacyjnym przychodem netto z interwałów; korekta wartości energii pozostającej w magazynie jest raportowana osobno w backteście."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 8,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "period_revenue",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "eb659122",
+                  "fields": [
+                    {
+                      "name": "sum(net_revenue_usd)",
+                      "expression": "SUM(`net_revenue_usd`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Przychód operacyjny netto"
+              },
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(net_revenue_usd)",
+                  "format": {
+                    "type": "number-currency",
+                    "currencyCode": "USD",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 2
+                    }
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 8,
+            "y": 0,
+            "width": 4,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "period_pv",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "eb659122",
+                  "fields": [
+                    {
+                      "name": "sum(actual_pv_energy_mwh)",
+                      "expression": "SUM(`actual_pv_energy_mwh`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Łączna produkcja PV"
+              },
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(actual_pv_energy_mwh)",
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 2
+                    }
+                  },
+                  "formatTemplate": "{{ @formatted }} MWh"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 3,
+            "width": 4,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "period_export",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "eb659122",
+                  "fields": [
+                    {
+                      "name": "sum(export_mwh)",
+                      "expression": "SUM(`export_mwh`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Łączny eksport do sieci"
+              },
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(export_mwh)",
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 2
+                    }
+                  },
+                  "formatTemplate": "{{ @formatted }} MWh"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 3,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "period_storage_loss",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "eb659122",
+                  "fields": [
+                    {
+                      "name": "sum(battery_loss_mwh)",
+                      "expression": "SUM(`battery_loss_mwh`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Straty energii w magazynie",
+                "description": "Łączne straty ładowania i rozładowania przy sprawności cyklu 90%.",
+                "showDescription": true
+              },
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(battery_loss_mwh)",
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 2
+                    }
+                  },
+                  "formatTemplate": "{{ @formatted }} MWh"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 7,
+            "y": 3,
+            "width": 5,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "daily_revenue",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "eb659122",
+                  "fields": [
+                    {
+                      "name": "delivery_date_local",
+                      "expression": "`delivery_date_local`"
+                    },
+                    {
+                      "name": "net_revenue_usd",
+                      "expression": "`net_revenue_usd`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "frame": {
+                "title": "Przychód netto według dnia",
+                "showTitle": true
+              },
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "delivery_date_local",
+                  "displayName": "Data",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "fields": [
+                    {
+                      "fieldName": "net_revenue_usd",
+                      "displayName": "Przychód netto (USD)"
+                    }
+                  ]
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 6,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "daily_energy",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "eb659122",
+                  "fields": [
+                    {
+                      "name": "delivery_date_local",
+                      "expression": "`delivery_date_local`"
+                    },
+                    {
+                      "name": "actual_pv_energy_mwh",
+                      "expression": "`actual_pv_energy_mwh`"
+                    },
+                    {
+                      "name": "export_mwh",
+                      "expression": "`export_mwh`"
+                    },
+                    {
+                      "name": "battery_charge_mwh",
+                      "expression": "`battery_charge_mwh`"
+                    },
+                    {
+                      "name": "battery_discharge_mwh",
+                      "expression": "`battery_discharge_mwh`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "frame": {
+                "title": "Dzienny bilans energii",
+                "showTitle": true
+              },
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "delivery_date_local",
+                  "displayName": "Data",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "fields": [
+                    {
+                      "fieldName": "actual_pv_energy_mwh",
+                      "displayName": "Produkcja PV (MWh)"
+                    },
+                    {
+                      "fieldName": "export_mwh",
+                      "displayName": "Eksport do sieci (MWh)"
+                    },
+                    {
+                      "fieldName": "battery_charge_mwh",
+                      "displayName": "Energia skierowana do magazynu (MWh)"
+                    },
+                    {
+                      "fieldName": "battery_discharge_mwh",
+                      "displayName": "Energia oddana z magazynu (MWh)"
+                    }
+                  ]
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 6,
+            "width": 6,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "daily_storage_end",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "eb659122",
+                  "fields": [
+                    {
+                      "name": "delivery_date_local",
+                      "expression": "`delivery_date_local`"
+                    },
+                    {
+                      "name": "end_of_day_storage_mwh",
+                      "expression": "`end_of_day_storage_mwh`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "frame": {
+                "title": "Stan magazynu na koniec każdego dnia",
+                "showTitle": true
+              },
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "delivery_date_local",
+                  "displayName": "Data",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "fields": [
+                    {
+                      "fieldName": "end_of_day_storage_mwh",
+                      "displayName": "Stan magazynu na koniec dnia (MWh)"
+                    }
+                  ]
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 13,
+            "width": 12,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "daily_summary_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "eb659122",
+                  "fields": [
+                    {
+                      "name": "delivery_date_local",
+                      "expression": "`delivery_date_local`"
+                    },
+                    {
+                      "name": "net_revenue_usd",
+                      "expression": "`net_revenue_usd`"
+                    },
+                    {
+                      "name": "actual_pv_energy_mwh",
+                      "expression": "`actual_pv_energy_mwh`"
+                    },
+                    {
+                      "name": "export_mwh",
+                      "expression": "`export_mwh`"
+                    },
+                    {
+                      "name": "battery_charge_mwh",
+                      "expression": "`battery_charge_mwh`"
+                    },
+                    {
+                      "name": "battery_discharge_mwh",
+                      "expression": "`battery_discharge_mwh`"
+                    },
+                    {
+                      "name": "battery_loss_mwh",
+                      "expression": "`battery_loss_mwh`"
+                    },
+                    {
+                      "name": "end_of_day_storage_mwh",
+                      "expression": "`end_of_day_storage_mwh`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "title": "Dzienne wyniki pracy farmy",
+                "showTitle": true
+              },
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "delivery_date_local",
+                    "displayName": "Data"
+                  },
+                  {
+                    "fieldName": "net_revenue_usd",
+                    "displayName": "Przychód netto (USD)",
+                    "format": {
+                      "type": "number-currency",
+                      "currencyCode": "USD",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 2
+                      }
+                    }
+                  },
+                  {
+                    "fieldName": "actual_pv_energy_mwh",
+                    "displayName": "Produkcja PV (MWh)",
+                    "format": {
+                      "type": "number-plain",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 3
+                      }
+                    }
+                  },
+                  {
+                    "fieldName": "export_mwh",
+                    "displayName": "Eksport do sieci (MWh)",
+                    "format": {
+                      "type": "number-plain",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 3
+                      }
+                    }
+                  },
+                  {
+                    "fieldName": "battery_charge_mwh",
+                    "displayName": "Energia skierowana do magazynu (MWh)",
+                    "format": {
+                      "type": "number-plain",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 3
+                      }
+                    }
+                  },
+                  {
+                    "fieldName": "battery_discharge_mwh",
+                    "displayName": "Energia oddana z magazynu (MWh)",
+                    "format": {
+                      "type": "number-plain",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 3
+                      }
+                    }
+                  },
+                  {
+                    "fieldName": "battery_loss_mwh",
+                    "displayName": "Straty magazynu (MWh)",
+                    "format": {
+                      "type": "number-plain",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 3
+                      }
+                    }
+                  },
+                  {
+                    "fieldName": "end_of_day_storage_mwh",
+                    "displayName": "Stan magazynu na koniec dnia (MWh)",
+                    "format": {
+                      "type": "number-plain",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 3
+                      }
+                    }
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 18,
+            "width": 12,
+            "height": 9
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1"
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "widgetHeaderAlignment": "ALIGNMENT_UNSPECIFIED"
+    },
+    "applyModeEnabled": false
+  }
+}
