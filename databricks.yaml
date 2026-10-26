@@ -1,0 +1,6 @@
+bundle:
+  name: pv_lakehouse_platform
+
+include:
+  - Job1.yaml
+  - Job2.yaml

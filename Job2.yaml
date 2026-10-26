@@ -1,0 +1,63 @@
+resources:
+  jobs:
+    energy_market_analysis_final:
+      name: energy_market_analysis_final
+      tasks:
+        - task_key: 10_gold_eda_and_time_split
+          notebook_task:
+            notebook_path: /10_gold_eda_and_time_split.ipynb
+            source: WORKSPACE
+          min_retry_interval_millis: 900000
+          disable_auto_optimization: true
+        - task_key: 11_baseline_forecasting_models
+          depends_on:
+            - task_key: 10_gold_eda_and_time_split
+          notebook_task:
+            notebook_path: /11_baseline_forecasting_models.ipynb
+            source: WORKSPACE
+          min_retry_interval_millis: 900000
+          disable_auto_optimization: true
+        - task_key: 12_day_ahead_schedule
+          depends_on:
+            - task_key: 11_baseline_forecasting_models
+          notebook_task:
+            notebook_path: /12_day_ahead_schedule.ipynb
+            source: WORKSPACE
+          min_retry_interval_millis: 900000
+          disable_auto_optimization: true
+        - task_key: 13_battery_dispatch_backtest
+          depends_on:
+            - task_key: 12_day_ahead_schedule
+          notebook_task:
+            notebook_path: /13_battery_dispatch_backtest.ipynb
+            source: WORKSPACE
+          min_retry_interval_millis: 900000
+          disable_auto_optimization: true
+        - task_key: 14_build_business_kpis
+          depends_on:
+            - task_key: 13_battery_dispatch_backtest
+          notebook_task:
+            notebook_path: /14_business_results.ipynb
+            source: WORKSPACE
+          min_retry_interval_millis: 900000
+          disable_auto_optimization: true
+        - task_key: 15_decision_support_system
+          depends_on:
+            - task_key: 14_build_business_kpis
+          notebook_task:
+            notebook_path: /15_decision_support_system.ipynb
+            source: WORKSPACE
+          min_retry_interval_millis: 900000
+          disable_auto_optimization: true
+      queue:
+        enabled: true
+      parameters:
+        - name: evaluation_start_date_local
+          default: 2024-07-01
+        - name: train_end_date_local_exclusive
+          default: 2024-09-01
+        - name: validation_end_date_local_exclusive
+          default: 2024-10-01
+        - name: evaluation_end_date_local_exclusive
+          default: 2024-11-01
+      performance_target: PERFORMANCE_OPTIMIZED
