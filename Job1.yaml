@@ -5,13 +5,13 @@ resources:
       tasks:
         - task_key: setup_project
           notebook_task:
-            notebook_path: /00_setup_project.ipynb
+            notebook_path: ./00_setup_project.ipynb
             source: WORKSPACE
         - task_key: ingest_caiso
           depends_on:
             - task_key: setup_project
           notebook_task:
-            notebook_path: /06_ingest_caiso_prices.ipynb
+            notebook_path: ./06_ingest_caiso_prices.ipynb
             source: WORKSPACE
           max_retries: 3
           min_retry_interval_millis: 300000
@@ -20,25 +20,25 @@ resources:
           depends_on:
             - task_key: ingest_caiso
           notebook_task:
-            notebook_path: /07_bronze_caiso_prices.ipynb
+            notebook_path: ./07_bronze_caiso_prices.ipynb
             source: WORKSPACE
         - task_key: ingest_nlr
           depends_on:
             - task_key: setup_project
           notebook_task:
-            notebook_path: /01_ingest_nlr.ipynb
+            notebook_path: ./01_ingest_nlr.ipynb
             source: WORKSPACE
         - task_key: bronze_nlr
           depends_on:
             - task_key: ingest_nlr
           notebook_task:
-            notebook_path: /02_bronze_nlr.ipynb
+            notebook_path: ./02_bronze_nlr.ipynb
             source: WORKSPACE
         - task_key: ingest_weather
           depends_on:
             - task_key: setup_project
           notebook_task:
-            notebook_path: /04_ingest_weather_forecasts.ipynb
+            notebook_path: ./04_ingest_weather_forecasts.ipynb
             source: WORKSPACE
           max_retries: 3
           min_retry_interval_millis: 300000
