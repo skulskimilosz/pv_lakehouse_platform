@@ -33,26 +33,26 @@ Przepływ danych:
 
 ## Zawartość repozytorium
 
-Notebooki są zapisane jako pliki `.py` w formacie eksportu Databricks (`# Databricks notebook source`).
+Notebooki są zapisane jako pliki `.ipynb` w formacie eksportu Databricks (`# Databricks notebook source`).
 
 | Plik | Zadanie |
 | --- | --- |
-| `00_setup_project.py` | Przygotowanie i kontrola środowiska projektu. |
-| `01_ingest_nlr.py` | Pobranie pomiarów instalacji PV. |
-| `02_bronze_nlr.py` | Warstwa Bronze dla pomiarów PV. |
-| `03_silver_nlr.py` | Oczyszczanie i standaryzacja pomiarów PV. |
-| `04_ingest_weather_forecasts.py` | Pozyskanie historycznych prognoz pogody. |
-| `05_silver_weather.py` | Przygotowanie danych pogodowych. |
-| `06_ingest_caiso_prices.py` | Pozyskanie cen CAISO. |
-| `07_bronze_caiso_prices.py` | Warstwa Bronze dla cen energii. |
-| `08_silver_caiso_prices.py` | Przygotowanie cen energii do analiz. |
-| `09_gold_market_replay.py` | Integracja Gold i historyczne odtworzenie informacji rynkowej. |
-| `10_gold_eda_and_time_split.py` | Analiza eksploracyjna i chronologiczny podział danych. |
-| `11_baseline_forecasting_models.py` | Budowa i ocena bazowych modeli prognostycznych. |
-| `12_day_ahead_schedule.py` | Przygotowanie harmonogramu sprzedaży DAM. |
-| `13_battery_dispatch_backtest.py` | Historyczna symulacja ładowania i rozładowania magazynu. |
-| `14_business_results.py` | Obliczenie i prezentacja wyników energetycznych i finansowych. |
-| `15_decision_support_system.py` | Przygotowanie informacji i rekomendacji dla operatora. |
+| `00_setup_project.ipynb` | Przygotowanie i kontrola środowiska projektu. |
+| `01_ingest_nlr.ipynb` | Pobranie pomiarów instalacji PV. |
+| `02_bronze_nlr.ipynb` | Warstwa Bronze dla pomiarów PV. |
+| `03_silver_nlr.ipynb` | Oczyszczanie i standaryzacja pomiarów PV. |
+| `04_ingest_weather_forecasts.ipynb` | Pozyskanie historycznych prognoz pogody. |
+| `05_silver_weather.ipynb` | Przygotowanie danych pogodowych. |
+| `06_ingest_caiso_prices.ipynb` | Pozyskanie cen CAISO. |
+| `07_bronze_caiso_prices.ipynb` | Warstwa Bronze dla cen energii. |
+| `08_silver_caiso_prices.ipynb` | Przygotowanie cen energii do analiz. |
+| `09_gold_market_replay.ipynb` | Integracja Gold i historyczne odtworzenie informacji rynkowej. |
+| `10_gold_eda_and_time_split.ipynb` | Analiza eksploracyjna i chronologiczny podział danych. |
+| `11_baseline_forecasting_models.ipynb` | Budowa i ocena bazowych modeli prognostycznych. |
+| `12_day_ahead_schedule.ipynb` | Przygotowanie harmonogramu sprzedaży DAM. |
+| `13_battery_dispatch_backtest.ipynb` | Historyczna symulacja ładowania i rozładowania magazynu. |
+| `14_business_results.ipynb` | Obliczenie i prezentacja wyników energetycznych i finansowych. |
+| `15_decision_support_system.ipynb` | Przygotowanie informacji i rekomendacji dla operatora. |
 | `Panel operacyjny farmy fotowoltaicznej.lvdash.json` | Eksport definicji panelu Databricks. |
 | `manifest.mf` | Plik manifestu zawarty w eksporcie projektu. |
 
@@ -101,8 +101,8 @@ Poniżej przedstawiono **oryginalne zrzuty ekranu z dashboardu Databricks**, udo
 ## Uruchomienie
 
 1. Przygotuj workspace **Databricks** z dostępem do wymaganych funkcji Spark/Delta i odpowiednimi uprawnieniami do Unity Catalog, wolumenów oraz tworzenia tabel.
-2. Zaimportuj pliki `.py` jako notebooki Databricks. Zachowaj ich nazwy i kolejność.
-3. Otwórz `00_setup_project.py` i sprawdź ustawienia katalogu, schematów, ścieżek oraz uprawnienia w swoim środowisku. Skontroluj też konfigurację źródeł zewnętrznych w notebookach pobierających dane.
+2. Zaimportuj pliki `.ipynb` jako notebooki Databricks. Zachowaj ich nazwy i kolejność.
+3. Otwórz `00_setup_project.ipynb` i sprawdź ustawienia katalogu, schematów, ścieżek oraz uprawnienia w swoim środowisku. Skontroluj też konfigurację źródeł zewnętrznych w notebookach pobierających dane.
 4. Uruchamiaj notebooki w kolejności **00–15**. Logicznie odpowiada to dwóm etapom: **00–09 — przygotowanie danych**, **10–15 — analiza i symulacja**. Repozytorium zawiera również definicje dwóch jobów w YAML (wymagające zgodnych ścieżek i konfiguracji środowiska).
 5. Po zbudowaniu tabel wynikowych zaimportuj definicję panelu z pliku `.lvdash.json` i dostosuj połączenia oraz nazwy obiektów SQL do swojego workspace.
 6. Zweryfikuj komunikaty kontroli jakości, kompletność danych, zakresy dat i wyniki symulacji przed interpretacją rezultatów.
