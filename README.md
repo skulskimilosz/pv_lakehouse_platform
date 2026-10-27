@@ -35,26 +35,26 @@ The pipeline follows a medallion-style lakehouse architecture:
 
 ## Repository contents
 
-The 16 notebooks are exported as Databricks `.py` notebooks (`# Databricks notebook source`).
+The 16 notebooks are exported as Databricks `.ipynb` notebooks (`# Databricks notebook source`).
 
 | File | Purpose |
 | --- | --- |
-| `00_setup_project.py` | Initialize and check the project environment. |
-| `01_ingest_nlr.py` | Ingest PV installation measurements. |
-| `02_bronze_nlr.py` | Build the Bronze layer for PV measurements. |
-| `03_silver_nlr.py` | Clean and standardize PV measurements. |
-| `04_ingest_weather_forecasts.py` | Retrieve archived weather forecasts. |
-| `05_silver_weather.py` | Prepare weather data for analysis. |
-| `06_ingest_caiso_prices.py` | Retrieve CAISO market prices. |
-| `07_bronze_caiso_prices.py` | Build the Bronze layer for electricity prices. |
-| `08_silver_caiso_prices.py` | Prepare market prices for downstream analytics. |
-| `09_gold_market_replay.py` | Integrate Gold datasets and reconstruct historical market information. |
-| `10_gold_eda_and_time_split.py` | Exploratory analysis and chronological data split. |
-| `11_baseline_forecasting_models.py` | Train and evaluate baseline forecasting models. |
-| `12_day_ahead_schedule.py` | Generate a DAM sales schedule. |
-| `13_battery_dispatch_backtest.py` | Simulate historical battery charging and discharging. |
-| `14_business_results.py` | Calculate energy and financial outcomes. |
-| `15_decision_support_system.py` | Prepare operator-facing decisions and recommendations. |
+| `00_setup_project.ipynb` | Initialize and check the project environment. |
+| `01_ingest_nlr.ipynb` | Ingest PV installation measurements. |
+| `02_bronze_nlr.ipynb` | Build the Bronze layer for PV measurements. |
+| `03_silver_nlr.ipynb` | Clean and standardize PV measurements. |
+| `04_ingest_weather_forecasts.ipynb` | Retrieve archived weather forecasts. |
+| `05_silver_weather.ipynb` | Prepare weather data for analysis. |
+| `06_ingest_caiso_prices.ipynb` | Retrieve CAISO market prices. |
+| `07_bronze_caiso_prices.ipynb` | Build the Bronze layer for electricity prices. |
+| `08_silver_caiso_prices.ipynb` | Prepare market prices for downstream analytics. |
+| `09_gold_market_replay.ipynb` | Integrate Gold datasets and reconstruct historical market information. |
+| `10_gold_eda_and_time_split.ipynb` | Exploratory analysis and chronological data split. |
+| `11_baseline_forecasting_models.ipynb` | Train and evaluate baseline forecasting models. |
+| `12_day_ahead_schedule.ipynb` | Generate a DAM sales schedule. |
+| `13_battery_dispatch_backtest.ipynb` | Simulate historical battery charging and discharging. |
+| `14_business_results.ipynb` | Calculate energy and financial outcomes. |
+| `15_decision_support_system.ipynb` | Prepare operator-facing decisions and recommendations. |
 | `Panel operacyjny farmy fotowoltaicznej.lvdash.json` | Exported Databricks dashboard definition. |
 | `manifest.mf` | Manifest included in the project export. |
 
@@ -103,8 +103,8 @@ The four images below are **actual screenshots of the project's Databricks dashb
 ## How to run
 
 1. Set up a **Databricks workspace** with Spark/Delta capabilities and appropriate permissions for Unity Catalog, volumes, and table creation.
-2. Import the `.py` files as Databricks notebooks, retaining their names and execution order.
-3. Review `00_setup_project.py` for catalog, schema, storage paths, and permissions. Check external source configuration in the ingestion notebooks.
+2. Import the `.ipynb` files as Databricks notebooks, retaining their names and execution order.
+3. Review `00_setup_project.ipynb` for catalog, schema, storage paths, and permissions. Check external source configuration in the ingestion notebooks.
 4. Execute notebooks **00–15** in order, corresponding to **00–09 (data preparation)** and **10–15 (analytics and simulation)**. The two YAML job definitions can also be used once paths and environment settings have been configured.
 5. Once result tables exist, import the `.lvdash.json` dashboard definition and adapt SQL object names and connections for the workspace.
 6. Review data-quality checks, data completeness, date ranges, and simulation outputs before interpreting results.
